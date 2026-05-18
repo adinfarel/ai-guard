@@ -1,0 +1,22 @@
+data:
+  raw_dir: data/raw/cicids2017
+  processed_dir: data/processed/cicids2017
+  label_column: Label
+  keep_labels:
+    - BENIGN
+    - DDoS
+
+target:
+  benign_label: BENIGN
+  attack_label: DDoS
+  benign_id: 0
+  attack_id: 1
+
+split:
+  test_size: 0.2
+  val_size: 0.1
+  random_state: 42
+
+model:
+  name: lightgbm
+  artifact_dir: artifacts/tabular_firewall

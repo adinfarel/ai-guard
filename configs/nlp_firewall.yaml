@@ -1,0 +1,22 @@
+dataset:
+  name: lmsys/toxic-chat
+  config: toxicchat0124
+  text_column: user_input
+  label_columns:
+    - toxicity
+    - jailbreaking
+
+target:
+  safe_id: 0
+  blocked_id: 1
+
+model:
+  base_model: distilbert-base-uncased
+  max_length: 192
+  artifact_dir: artifacts/nlp_firewall
+
+training:
+  epochs: 2
+  batch_size: 16
+  learning_rate: 0.00002
+  seed: 42
