@@ -20,3 +20,13 @@ split:
 model:
   name: lightgbm
   artifact_dir: artifacts/tabular_firewall
+
+hyperparameter:
+  model_name: LightGBM
+  task: BENIGN_vs_DDoS
+  n_estimators: 400
+  learning_rate: 0.05
+  num_leaves: 64
+  subsample: 0.9
+  colsample_bytree: 0.9
+  class_weight: balanced
