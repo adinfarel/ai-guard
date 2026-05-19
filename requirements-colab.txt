@@ -11,3 +11,4 @@ numpy
 mlflow
 pyyaml
 tqdm
+mlflow

@@ -29,6 +29,7 @@ data/processed/*
 # Artifacts
 artifacts/*
 !artifacts/**/.gitkeep
+!artifacts**/*.dvc
 
 # MLflow
 mlruns/

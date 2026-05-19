@@ -23,8 +23,11 @@ from multiprocessing import Pipe
 from pathlib import Path
 
 import joblib
+import mlflow.sklearn
 import pandas as pd
 import yaml
+import mlflow
+import mlflow.sklearn as mlsk
 
 from lightgbm import LGBMClassifier
 from sklearn.impute import SimpleImputer
@@ -161,32 +164,62 @@ def main() -> None:
     
     model = build_model_pipeline(random_state=random_state)
     
-    print(f"\nTraining LightGBM Network Firewall...")
-    model.fit(X_train, y_train)
+    mlflow.set_experiment("ai_guard_tabular_firewall.")
+    cfg_hyprprmtrs = config['hyperparameter']
     
-    val_metrics = evaluate_model(model, X_val, y_val, split_name="val")
-    test_metrics = evaluate_model(model, X_test, y_test, split_name="test")
+    with mlflow.start_run(run_name="lightgbm_benign_vs_ddos"):
+        mlflow.log_param("model_name", cfg_hyprprmtrs['model_name'])
+        mlflow.log_param("task", cfg_hyprprmtrs['task'])
+        mlflow.log_param("n_estimators", cfg_hyprprmtrs['n_estimators'])
+        mlflow.log_param("learning_rate", cfg_hyprprmtrs['learning_rate'])
+        mlflow.log_param("num_leaves", cfg_hyprprmtrs['num_leaves'])
+        mlflow.log_param("subsample", cfg_hyprprmtrs['subsample'])
+        mlflow.log_param("colsample_bytree", cfg_hyprprmtrs['colsample_bytree'])
+        mlflow.log_param("class_weight", cfg_hyprprmtrs['class_weight'])
+        mlflow.log_param("num_features", len(feature_columns))
+        mlflow.log_param("train_rows", len(train_df))
+        mlflow.log_param("val_rows", len(val_df))
+        mlflow.log_param("test_rows", len(test_df))
+        
+        print(f"\nTraining LightGBM Network Firewall...")
+        model.fit(X_train, y_train)
+        
+        val_metrics = evaluate_model(model, X_val, y_val, split_name="val")
+        test_metrics = evaluate_model(model, X_test, y_test, split_name="test")
+        
+        for key, value in val_metrics.items():
+            if key not in ['confusion_matrix', 'split']:
+                mlflow.log_param(f"val_{key}", value)
+                
+        for key, value in test_metrics.items():
+            if key not in ['confusion_matrix', 'split']:
+                mlflow.log_param(f"test_{key}", value)
     
-    model_path = artifact_dir / "model_pipeline.joblib"
-    metrics_path = artifact_dir / "metrics.json"
-    feature_path = artifact_dir / "feature_columns.json"
-    
-    joblib.dump(model, model_path)
-    
-    with open(metrics_path, 'w', encoding='utf-8') as f:
-        json.dump(
-            {
-                "task": "BENIGN_vs_DDoS_binary_classification",
-                "model": "LightGBM",
-                "val": val_metrics,
-                "test": test_metrics
-            },
-            f,
-            indent=2,
-        )
-    
-    with open(feature_path, 'w', encoding='utf-8') as f:
-        json.dump(feature_columns, f, indent=2)
+        model_path = artifact_dir / "model_pipeline.joblib"
+        metrics_path = artifact_dir / "metrics.json"
+        feature_path = artifact_dir / "feature_columns.json"
+        
+        joblib.dump(model, model_path)
+        
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(
+                {
+                    "task": "BENIGN_vs_DDoS_binary_classification",
+                    "model": "LightGBM",
+                    "val": val_metrics,
+                    "test": test_metrics
+                },
+                f,
+                indent=2,
+            )
+        
+        with open(feature_path, 'w', encoding='utf-8') as f:
+            json.dump(feature_columns, f, indent=2)
+        
+        mlflow.log_artifact(str(model_path))
+        mlflow.log_artifact(str(metrics_path))
+        mlflow.log_artifact(str(feature_path))
+        mlsk.log_model(model, artifact_path="model_pipeline")
     
     print("\nSaved artifacts")
     print(f"- {model_path}")
