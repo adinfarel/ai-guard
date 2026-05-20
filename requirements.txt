@@ -13,3 +13,4 @@ httpx
 python-dotenv
 pytest
 mlflow
+datasets
