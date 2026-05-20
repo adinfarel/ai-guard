@@ -1,0 +1,6 @@
+outs:
+- md5: aefd6975be6f477317475335d0b169c5.dir
+  size: 2247703
+  nfiles: 4
+  hash: md5
+  path: tabular_firewall
