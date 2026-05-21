@@ -7,6 +7,7 @@ API routes for AI-Guard Gateway.
 from typing import Any
 
 import pandas as pd
+import time
 from fastapi import APIRouter, Depends
 
 from src.ai_guard.gateway.dependencies import (
@@ -18,6 +19,7 @@ from src.ai_guard.gateway.dependencies import (
 from src.ai_guard.tabular_firewall.inference import TabularFirewall
 from src.ai_guard.nlp_firewall.inference import NLPFirewall
 from src.ai_guard.gateway.decision_engine import build_guard_decision
+from src.ai_guard.storage.database import insert_prediction_log, fetch_recent_logs
 
 router = APIRouter()
 
@@ -145,12 +147,46 @@ def guard(
     - Log decision
     - Add safety metadata
     """
+    start_time = time.perf_counter()
+    
     prompt = str(payload.get('prompt', ''))
     
     nlp_prediction = nlp_firewall.predict_one(prompt)
     decision = build_guard_decision(nlp_prediction)
     
-    return {
+    latency_ms = (time.perf_counter() - start_time) * 1000 # S -> MS
+    
+    response = {
         "prompt": prompt,
         **decision,
+        "latency_ms": latency_ms
+    }
+    
+    insert_prediction_log(
+        endpoint="/guard",
+        prompt=prompt,
+        decision=response['decision'],
+        allowed=response['allowed'],
+        blocked_by=response["blocked_by"],
+        reason=response["reason"],
+        nlp_score=response["scores"]["nlp_score"],
+        latency_ms=latency_ms,
+        raw_response=response,
+    )
+    
+    return response
+
+@router.get("/logs/recent")
+def recent_logs(limit: int = 20) -> dict[str, Any]:
+    """
+    Return recent prediction logs.
+
+    This is a local/admin-style endpoint for debugging and learning.
+    """
+    
+    logs = fetch_recent_logs(limit=limit)
+    
+    return {
+        "count": len(logs),
+        "logs": logs
     }
