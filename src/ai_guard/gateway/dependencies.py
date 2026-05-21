@@ -12,6 +12,7 @@ import pandas as pd
 from fastapi import Request, HTTPException, status
 
 from src.ai_guard.tabular_firewall.inference import TabularFirewall
+from src.ai_guard.nlp_firewall.inference import NLPFirewall
 
 def get_tabular_firewall(request: Request) -> TabularFirewall:
     """
@@ -53,3 +54,16 @@ def get_runtime_info(request: Request) -> dict[str, Any]:
         return {}
 
     return runtime_info
+
+def get_nlp_firewall(request: Request) -> NLPFirewall:
+    """Get loaded NLPFirewall from app.state"""
+    firewall = getattr(request.app.state, "nlp_firewall", None)
+    
+    if firewall is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="NLP firewall is not loaded."
+        )
+    
+    return firewall
+

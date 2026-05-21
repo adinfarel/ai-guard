@@ -4,8 +4,6 @@ src/ai_guard/gateway/routes.py
 API routes for AI-Guard Gateway.
 """
 
-from curses.ascii import HT
-from random import sample
 from typing import Any
 
 from fastapi.exceptions import DependencyScopeError
@@ -16,8 +14,10 @@ from src.ai_guard.gateway.dependencies import (
     get_cicids_test_df,
     get_runtime_info,
     get_tabular_firewall,
+    get_nlp_firewall,
 )
 from src.ai_guard.tabular_firewall.inference import TabularFirewall
+from src.ai_guard.nlp_firewall.inference import NLPFirewall
 
 router = APIRouter()
 
@@ -34,6 +34,7 @@ def health() -> dict[str, Any]:
 @router.get("/model-info")
 def model_info(
     tabular_firewall: TabularFirewall = Depends(get_tabular_firewall),
+    nlp_firewall: NLPFirewall = Depends(get_nlp_firewall),
     runtime_info: dict[str, Any] = Depends(get_runtime_info),
 ):
     """
@@ -52,6 +53,8 @@ def model_info(
             "nlp_firewall": {
                 "status": "loaded",
                 "task": "toxic_or_jailbreak_prompt_detection",
+                "threshold": nlp_firewall.threshold,
+                "max_length": nlp_firewall.max_length
             },
         }
     }
@@ -95,5 +98,27 @@ def check_network_sample(
         "sample_index": sample_index,
         "true_target": true_target,
         "true_label": true_label,
+        "prediction": prediction
+    }
+
+@router.post("/check-prompt")
+def check_prompt(
+    payload: dict[str, Any],
+    nlp_firewall: NLPFirewall = Depends(get_nlp_firewall),
+) -> dict[str, Any]:
+    """
+    User-facing endpoint for NLP Firewall.
+
+    Input:
+        {
+            "prompt": "..."
+        }
+    """
+    prompt = str(payload.get("prompt", ""))
+    
+    prediction = nlp_firewall.predict_one(prompt)
+    
+    return {
+        "prompt": prompt,
         "prediction": prediction
     }

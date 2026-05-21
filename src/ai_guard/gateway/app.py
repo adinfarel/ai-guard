@@ -14,10 +14,10 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-import fastapi
 import pandas as pd
 from fastapi import FastAPI
 
+from src.ai_guard.nlp_firewall.inference import NLPFirewall
 from src.ai_guard.gateway.routes import router
 from src.ai_guard.tabular_firewall.inference import TabularFirewall
 
@@ -26,6 +26,7 @@ APP_VERSION = "0.1.0"
 
 TABULAR_ARTIFACT_DIR = Path("artifacts/tabular_firewall")
 CICIDS_TEST_PATH = Path("data/processed/cicids2017/test.csv")
+NLP_ARTIFACT_DIR = Path("artifacts/nlp_firewall")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -43,15 +44,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         threshold=0.5,
     )
     
+    nlp_firewall = NLPFirewall.from_artifact(
+        artifact_dir=NLP_ARTIFACT_DIR,
+        threshold=0.1,
+        device="cpu"
+    )
+    
     if not CICIDS_TEST_PATH.exists():
         raise FileNotFoundError(f"CICIDS test split not found: {CICIDS_TEST_PATH}")
     
     cicids_test_df = pd.read_csv(CICIDS_TEST_PATH)
     
     app.state.tabular_firewall = tabular_firewall
+    app.state.nlp_firewall = nlp_firewall
     app.state.cicids_test_df = cicids_test_df
     app.state.runtime_info = {
         "tabular_artifact_dir": str(TABULAR_ARTIFACT_DIR),
+        "nlp_artifact_dir": str(NLP_ARTIFACT_DIR),
         "cicids_test_path": str(CICIDS_TEST_PATH),
         "num_cicids_test_rows": len(cicids_test_df),
     }
@@ -63,6 +72,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     print("[shutdown] Cleaning AI-Guard runtime artifacts...")
     
     app.state.tabular_firewall = None
+    app.state.nlp_firewall = None
     app.state.cicids_test_df = None
     app.state.runtime_info = None
     
