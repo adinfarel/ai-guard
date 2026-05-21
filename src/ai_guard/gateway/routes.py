@@ -6,9 +6,8 @@ API routes for AI-Guard Gateway.
 
 from typing import Any
 
-from fastapi.exceptions import DependencyScopeError
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from src.ai_guard.gateway.dependencies import (
     get_cicids_test_df,
@@ -18,6 +17,7 @@ from src.ai_guard.gateway.dependencies import (
 )
 from src.ai_guard.tabular_firewall.inference import TabularFirewall
 from src.ai_guard.nlp_firewall.inference import NLPFirewall
+from src.ai_guard.gateway.decision_engine import build_guard_decision
 
 router = APIRouter()
 
@@ -121,4 +121,36 @@ def check_prompt(
     return {
         "prompt": prompt,
         "prediction": prediction
+    }
+
+@router.post("/guard")
+def guard(
+    payload: dict[str, Any],
+    nlp_firewall: NLPFirewall = Depends(get_nlp_firewall)
+) -> dict[str, Any]:
+    """
+    Main user-facing AI-Guard endpoint.
+
+    Input:
+        {
+            "prompt": "..."
+        }
+
+    Current behavior:
+    - Runs NLP Firewall
+    - Returns allow/block decision
+
+    Future behavior:
+    - If allowed, forward request to LLM backend
+    - Log decision
+    - Add safety metadata
+    """
+    prompt = str(payload.get('prompt', ''))
+    
+    nlp_prediction = nlp_firewall.predict_one(prompt)
+    decision = build_guard_decision(nlp_prediction)
+    
+    return {
+        "prompt": prompt,
+        **decision,
     }
