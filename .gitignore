@@ -34,7 +34,12 @@ artifacts/*
 # MLflow
 mlruns/
 mlartifacts/
+mlflow.db
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Reports
+reports/drift/*.html
+reports/drift/*report*.json
