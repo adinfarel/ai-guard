@@ -8,7 +8,7 @@ from typing import Any
 
 import pandas as pd
 import time
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
 from src.ai_guard.gateway.dependencies import (
     get_cicids_test_df,
@@ -23,6 +23,17 @@ from src.ai_guard.storage.database import insert_prediction_log, fetch_recent_lo
 from src.ai_guard.worker.celery_app import celery_app
 from src.ai_guard.worker.tasks import run_network_drift_check
 from celery.result import AsyncResult
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from src.ai_guard.monitoring.metrics import (
+    ALLOWED_REQUESTS_TOTAL,
+    BLOCKED_REQUESTS_TOTAL,
+    DRIFT_TASKS_SUBMITTED_TOTAL,
+    GUARD_REQUEST_LATENCY_SECONDS,
+    GUARD_REQUESTS_TOTAL,
+    NETWORK_SAMPLE_BLOCKED_TOTAL,
+    NETWORK_SAMPLE_CHECKS_TOTAL,
+    NLP_SCORE_GAUGE,
+)
 
 router = APIRouter()
 
@@ -98,6 +109,11 @@ def check_network_sample(
     
     features = rows.drop(labels=['target']).to_dict()
     prediction = tabular_firewall.predict_one(features) #type: ignore
+    
+    NETWORK_SAMPLE_CHECKS_TOTAL.inc()
+    
+    if prediction["blocked"]:
+        NETWORK_SAMPLE_BLOCKED_TOTAL.inc()
     
     return {
         "sample_index": sample_index,
@@ -177,6 +193,16 @@ def guard(
         raw_response=response,
     )
     
+    GUARD_REQUESTS_TOTAL.inc()
+    NLP_SCORE_GAUGE.set(response["scores"]["nlp_score"] or 0.0)
+    GUARD_REQUEST_LATENCY_SECONDS.observe(latency_ms / 1000)
+    
+    if response["allowed"]:
+        ALLOWED_REQUESTS_TOTAL.inc()
+    else:
+        for blocker in response["blocked_by"]:
+            BLOCKED_REQUESTS_TOTAL.labels(blocked_by=blocker).inc()
+    
     return response
 
 @router.get("/logs/recent")
@@ -226,6 +252,8 @@ def run_drift_check(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "reports/drift/network_drift_summary_async.json",
         ),
     )
+    
+    DRIFT_TASKS_SUBMITTED_TOTAL.inc()
 
     return {
         "message": "drift check task submitted.",
@@ -246,3 +274,15 @@ def get_task_status(task_id: str) -> dict[str, Any]:
         response["result"] = result.result
     
     return response
+
+@router.get("/metrics")
+def metrics() -> Response:
+    """
+    Prometheus metrics endpoint.
+
+    Prometheus scrapes this endpoint to collect AI-Guard runtime metrics.
+    """
+    return Response(
+        content=generate_latest(),
+        media_type=CONTENT_TYPE_LATEST
+    )

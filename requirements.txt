@@ -17,3 +17,4 @@ datasets
 evidently
 celery
 redis
+prometheus-client
