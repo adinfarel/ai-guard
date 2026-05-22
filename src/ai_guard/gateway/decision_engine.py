@@ -28,7 +28,7 @@ def build_guard_decision(
     allowed = len(blocked_by) == 0
     
     if allowed:
-        decision = "blocked"
+        decision = "allowed"
         reason = "passed_all_checks"
     else:
         decision = "blocked"
