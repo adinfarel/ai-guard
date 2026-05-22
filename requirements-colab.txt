@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 datasets
 transformers
 accelerate
@@ -16,3 +17,4 @@ datasets
 evidently
 celery
 redis
+prometheus-client

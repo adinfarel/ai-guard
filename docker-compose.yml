@@ -1,0 +1,121 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ai-guard:latest
+    container_name: ai_guard_api
+    command: >
+      uvicorn src.ai_guard.gateway.app:app
+      --host 0.0.0.0
+      --port 8000
+    environment:
+      AI_GUARD_REDIS_URL: http://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data/processed:/app/data/processed:ro
+      - ./artifacts:/app/artifacts:ro
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+  
+  celery_worker:
+    image: ai-guard:latest
+    container_name: ai_guard_celery_worker
+    command: >
+      celery -A src.ai_guard.worker.celery_app
+      worker
+      --loglevel=info
+    environment:
+      AI_GUARD_REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data/processed:/app/data/processed:ro
+      - ./artifacts:/app/artifacts:ro
+      - ./logs:/app/logs
+      - ./reports:/app/reports
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+  
+  redis:
+    image: redis:7-alpine
+    container_name: ai_guard_redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ai_guard_prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: ai_guard_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+  
+  mlflow:
+    image: ai-guard:latest
+    container_name: ai_guard_mlflow
+    command: >
+      mlflow ui
+      --backend-store-uri /app/mlruns
+      --host 0.0.0.0
+      --port 5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/app/mlruns
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  
+volumes:
+  redis_data:
+  prometheus_data:
+  grafana_data:
