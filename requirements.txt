@@ -15,3 +15,5 @@ pytest
 mlflow
 datasets
 evidently
+celery
+redis

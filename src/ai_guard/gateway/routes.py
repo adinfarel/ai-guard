@@ -20,6 +20,9 @@ from src.ai_guard.tabular_firewall.inference import TabularFirewall
 from src.ai_guard.nlp_firewall.inference import NLPFirewall
 from src.ai_guard.gateway.decision_engine import build_guard_decision
 from src.ai_guard.storage.database import insert_prediction_log, fetch_recent_logs
+from src.ai_guard.worker.celery_app import celery_app
+from src.ai_guard.worker.tasks import run_network_drift_check
+from celery.result import AsyncResult
 
 router = APIRouter()
 
@@ -190,3 +193,56 @@ def recent_logs(limit: int = 20) -> dict[str, Any]:
         "count": len(logs),
         "logs": logs
     }
+
+@router.post("/internal/drift/run")
+def run_drift_check(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """
+    Internal endpoint to enqueue network drift check.
+
+    This does not run the drift job inside the API process.
+    It sends the job to Celery worker through Redis.
+    """
+    payload = payload or {}
+    
+    task = run_network_drift_check.delay(
+        reference_path=payload.get(
+            "reference_path",
+            "data/processed/cicids2017/train.csv",
+        ),
+        current_path=payload.get(
+            "current_path",
+            "data/processed/cicids2017/test.csv",
+        ),
+        html_output=payload.get(
+            "html_output",
+            "reports/drift/network_drift_report_async.html",
+        ),
+        json_output=payload.get(
+            "json_output",
+            "reports/drift/network_drift_report_async.json",
+        ),
+        summary_output=payload.get(
+            "summary_output",
+            "reports/drift/network_drift_summary_async.json",
+        ),
+    )
+
+    return {
+        "message": "drift check task submitted.",
+        "task_id": task.id
+    }
+
+@router.get("/internal/tasks/{task_id}")
+def get_task_status(task_id: str) -> dict[str, Any]:
+    """Check Celery task status."""
+    result = AsyncResult(id=task_id, app=celery_app)
+    
+    response: dict[str, Any] = {
+        "task_id": task_id,
+        "status": result.status
+    }
+    
+    if result.ready():
+        response["result"] = result.result
+    
+    return response

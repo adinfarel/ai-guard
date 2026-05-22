@@ -13,3 +13,6 @@ pyyaml
 tqdm
 mlflow
 datasets
+evidently
+celery
+redis
